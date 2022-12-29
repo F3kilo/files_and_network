@@ -24,7 +24,10 @@ fn process_stream(mut stream: TcpStream) {
             break;
         }
 
-        let reply = u32::from_be_bytes(buf) ^ 0xFFFFFFFF;
+        let request = u32::from_be_bytes(buf);
+        println!("request: {request}");
+
+        let reply = request ^ 0xFFFFFFFF;
         if stream.write_all(&reply.to_be_bytes()).is_err() {
             break;
         }
