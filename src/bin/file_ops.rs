@@ -2,9 +2,8 @@
 //! - файл `test_file.txt` в директории с package.
 //! - директория `test_dir` в директории с package. Желательно, с содержимым.
 
-use std::fs;
-use std::path::PathBuf;
-use std::str::FromStr;
+use std::path::Path;
+use std::{fs, io};
 
 fn main() {
     // Копируем тестовый файл.
@@ -14,7 +13,7 @@ fn main() {
     remove_file();
 
     // Копируем тестовую директорию.
-    copy_dir();
+    copy_dir_all("./test_dir", "./test_dir_copy").unwrap();
 
     // Удаляем копию.
     remove_dir();
@@ -36,34 +35,23 @@ fn remove_file() {
 
 /// Стандартная библиотека не предоставляет функций для копирования директории.
 /// Поэтому, копировать файлы придётся по одному, проходясь по ним в цикле.
-fn copy_dir() {
-    let path_from = "./test_dir";
-    let path_to = "./test_dir_copy";
-
+fn copy_dir_all(src: impl AsRef<Path>, dst: impl AsRef<Path>) -> io::Result<()> {
     // Создаём целевую директорию.
-    fs::create_dir(path_to).expect("fail to copy file");
+    fs::create_dir_all(&dst)?;
 
-    // Проходим по файлам, которые лежат в исходной директории...
-    let dir_entries = fs::read_dir(path_from).expect("fail to read dir");
-    for entry in dir_entries {
-        let entry = entry.expect("failed to get dir entry");
-
-        // ... если это файл, то копируем его в целевую директорию.
-        let is_file = entry.file_type().map(|t| t.is_file()).unwrap_or_default();
-        if !is_file {
-            continue;
+    // Проходим по содержимому оригинальной директории.
+    for entry in fs::read_dir(src)? {
+        let entry = entry?;
+        let ty = entry.file_type()?;
+        if ty.is_dir() {
+            // Если попалась директория, вызываем copy_dir_all уже для неё.
+            copy_dir_all(entry.path(), dst.as_ref().join(entry.file_name()))?;
+        } else {
+            // Если не директорая (файл или symlink), то копируем объект.
+            fs::copy(entry.path(), dst.as_ref().join(entry.file_name()))?;
         }
-
-        let file_name = entry.file_name();
-
-        let mut path_from = PathBuf::from_str(path_from).expect("bad path");
-        path_from.push(file_name.clone());
-
-        let mut path_to = PathBuf::from_str(path_to).expect("bad path");
-        path_to.push(file_name);
-
-        fs::copy(path_from, path_to).expect("fail to copy file");
     }
+    Ok(())
 }
 
 fn remove_dir() {
